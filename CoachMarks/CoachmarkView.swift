@@ -44,7 +44,7 @@ public class CoachmarkView: UIView {
     }
 
     /// Background CircularView.
-    private lazy var outerCircle: CircularView = {
+    public lazy var outerCircle: CircularView = {
 
         let view = CircularView()
 
@@ -57,16 +57,30 @@ public class CoachmarkView: UIView {
 
         return view
 
+    } ()
+    
+    public lazy var middleCircle: CircularView = {
+        
+        let view = CircularView()
+        
+        view.shapeLayer.fillColor = UIColor.init(white: 1, alpha: 0.2).cgColor
+        view.delegate = self
+        view.circleScale = 1
+        view.isHidden = true
+        
+        return view
+        
     }()
 
     /// CircularView used as background for the `snapshotView` (when visible).
-    private lazy var innerCircle: CircularView = {
+    public lazy var innerCircle: CircularView = {
 
         let view = CircularView()
 
         view.shapeLayer.fillColor = UIColor.white.cgColor
         view.circleScale = 1.2
         view.isHidden = true
+//        view.shapeLayer.isHidden = true
 
         return view
 
@@ -119,6 +133,7 @@ public class CoachmarkView: UIView {
 
         addSubview(innerCircle)
         addSubview(outerCircle)
+        addSubview(middleCircle)
 
         let recognizer = UITapGestureRecognizer(target: self, action: #selector(tapAction(_:)))
         recognizer.numberOfTapsRequired = 1
@@ -161,6 +176,10 @@ public class CoachmarkView: UIView {
         //  inner circle
         innerCircle.frame = rect
         innerCircle.center = outerCircle.center
+        
+        //  middle circle
+        middleCircle.frame = rect.insetBy(dx: -35, dy: -35)
+        middleCircle.center = outerCircle.center
 
         //  text content
         textLabel.frame = {
@@ -188,20 +207,42 @@ public class CoachmarkView: UIView {
             //  text insets
             let insets = textEdgeInsets
 
-            //  innerCircle frame relative to outerCircle
-            let innerCircleRelativeFrame = convert(innerCircle.frame, to: outerCircle)
-
-            //  if the innerCircle is hidden there's no need to move the label
-            if !innerCircle.isHidden, intersection.intersects(innerCircleRelativeFrame) {
-
-                //  the label is over the circle
-                if intersection.midY < innerCircleRelativeFrame.midY {
-                    let extraMargin = intersection.maxY - innerCircleRelativeFrame.minY
-                    intersection.size.height -= extraMargin
-                } else {
-                    let extraMargin = innerCircleRelativeFrame.maxY - intersection.minY
-                    intersection.origin.y += extraMargin
-                    intersection.size.height -= extraMargin
+            //  if the middleCircle is hidden there's no need to move the label
+            if !middleCircle.isHidden {
+                
+                //  middleCircle frame relative to outerCircle
+                let middleCircleRelativeFrame = convert(middleCircle.frame, to: outerCircle)
+                
+                if intersection.intersects(middleCircleRelativeFrame) {
+                    
+                    //  the label is over the circle
+                    if intersection.midY < middleCircleRelativeFrame.midY {
+                        let extraMargin = intersection.maxY - middleCircleRelativeFrame.minY
+                        intersection.size.height -= extraMargin
+                    } else {
+                        let extraMargin = middleCircleRelativeFrame.maxY - intersection.minY
+                        intersection.origin.y += extraMargin
+                        intersection.size.height -= extraMargin
+                    }
+                }
+                
+            } else if !innerCircle.isHidden {
+                //  if the innerCircle is hidden there's no need to move the label
+                
+                //  innerCircle frame relative to outerCircle
+                let innerCircleRelativeFrame = convert(innerCircle.frame, to: outerCircle)
+                
+                if intersection.intersects(innerCircleRelativeFrame) {
+                    
+                    //  the label is over the circle
+                    if intersection.midY < innerCircleRelativeFrame.midY {
+                        let extraMargin = intersection.maxY - innerCircleRelativeFrame.minY
+                        intersection.size.height -= extraMargin
+                    } else {
+                        let extraMargin = innerCircleRelativeFrame.maxY - intersection.minY
+                        intersection.origin.y += extraMargin
+                        intersection.size.height -= extraMargin
+                    }
                 }
 
             }
@@ -235,7 +276,7 @@ public class CoachmarkView: UIView {
     ///   - view: View that is requesting the presentation.
     ///   - rect: `CGRect` in which the coachmark is centered.
     ///   - focusingOnElement: If `true`, takes a snapshot of `view` and add it as a subview.
-    public func present(in view: UIView, from rect: CGRect, focusingOnElement: Bool = true) {
+    public func present(in view: UIView, from rect: CGRect, focusingOnElement: Bool = true, useSnapshot: Bool = true) {
 
         isUserInteractionEnabled = true
         isHidden = false
@@ -254,7 +295,7 @@ public class CoachmarkView: UIView {
                                   width: dimension,
                                   height: dimension).intersection(view.bounds)
 
-        if focusingOnElement, let snapshot = view.snapshot(of: snapshotRect, from: view) {
+        if focusingOnElement, useSnapshot, let snapshot = view.snapshot(of: snapshotRect, from: view) {
 
             view.layoutIfNeeded()
 
@@ -264,6 +305,14 @@ public class CoachmarkView: UIView {
             innerCircle.isHidden = false
             innerCircle.animatePath(withDuration: animationDuration, fromValue: 0.0)
 
+        } else if focusingOnElement, !useSnapshot {
+            
+            view.layoutIfNeeded()
+            
+            innerCircle.isHidden = false
+            innerCircle.shapeLayer.isHidden = true
+            innerCircle.animatePath(withDuration: animationDuration, fromValue: 0.0)
+
         } else {
 
             innerCircle.isHidden = true
@@ -271,11 +320,14 @@ public class CoachmarkView: UIView {
         }
 
         outerCircle.isHidden = false
+        middleCircle.isHidden = false
 
         if #available(iOS 9, *) {
             outerCircle.animatePath(fromValue: 0.0)
+            middleCircle.animatePath(fromValue: 0.0)
         } else {
             outerCircle.animatePath(withDuration: animationDuration, fromValue: 0.0)
+            middleCircle.animatePath(withDuration: animationDuration, fromValue: 0.0)
         }
 
         setNeedsLayout()
@@ -289,6 +341,7 @@ public class CoachmarkView: UIView {
         isUserInteractionEnabled = false
 
         outerCircle.animatePathCompression(withDuration: animationDuration, animationTag: CoachmarkView.dismissalAnimationKey)
+        middleCircle.animatePathCompression(withDuration: animationDuration, animationTag: CoachmarkView.dismissalAnimationKey)
 
         if !innerCircle.isHidden {
             innerCircle.animatePathCompression(withDuration: animationDuration, animationTag: CoachmarkView.dismissalAnimationKey)
